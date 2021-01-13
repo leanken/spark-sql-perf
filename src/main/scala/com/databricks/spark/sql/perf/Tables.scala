@@ -174,7 +174,8 @@ abstract class Tables(sqlContext: SQLContext, scaleFactor: String,
       overwrite: Boolean,
       clusterByPartitionColumns: Boolean,
       filterOutNullPartitionValues: Boolean,
-      numPartitions: Int): Unit = {
+      numPartitions: Int,
+      nullPartitionRandomDistributeNum: Int): Unit = {
       val mode = if (overwrite) SaveMode.Overwrite else SaveMode.Ignore
 
       val data = df(format != "text", numPartitions)
@@ -186,7 +187,13 @@ abstract class Tables(sqlContext: SQLContext, scaleFactor: String,
           val columnString = data.schema.fields.map { field =>
             field.name
           }.mkString(",")
-          val partitionColumnString = partitionColumns.mkString(",")
+          val partitionColumnString = if (nullPartitionRandomDistributeNum > 0) {
+            partitionColumns.map(partitionColumn =>
+              s"COALESCE($partitionColumn, CAST(RAND() * $nullPartitionRandomDistributeNum AS INT))"
+            ).mkString(",")
+          } else {
+            partitionColumns.mkString(",")
+          }
           val predicates = if (filterOutNullPartitionValues) {
             partitionColumns.map(col => s"$col IS NOT NULL").mkString("WHERE ", " AND ", "")
           } else {
@@ -290,7 +297,8 @@ abstract class Tables(sqlContext: SQLContext, scaleFactor: String,
       clusterByPartitionColumns: Boolean,
       filterOutNullPartitionValues: Boolean,
       tableFilter: String = "",
-      numPartitions: Int = 100): Unit = {
+      numPartitions: Int = 100,
+      nullPartitionRandomDistributeNum: Int = 0): Unit = {
     var tablesToBeGenerated = if (partitionTables) {
       tables
     } else {
@@ -307,7 +315,7 @@ abstract class Tables(sqlContext: SQLContext, scaleFactor: String,
     tablesToBeGenerated.foreach { table =>
       val tableLocation = s"$location/${table.name}"
       table.genData(tableLocation, format, overwrite, clusterByPartitionColumns,
-        filterOutNullPartitionValues, numPartitions)
+        filterOutNullPartitionValues, numPartitions, nullPartitionRandomDistributeNum)
     }
   }
 
